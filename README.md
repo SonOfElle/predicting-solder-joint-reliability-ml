@@ -1,22 +1,179 @@
-# deep-learning-and-ai-projects
-![Python](https://img.shields.io/badge/Python-3.9+-blue)
-![TensorFlow](https://img.shields.io/badge/TensorFlow-2.x-orange)
-![PyTorch](https://img.shields.io/badge/PyTorch-2.x-red)
-![DeepLearning](https://img.shields.io/badge/Deep--Learning-Architectures-yellow)
+# Predicting Solder Joint Reliability with Machine Learning
 
-Deep learning experiments and architecture analysis; CNNs, RNNs etc.
+<p align="center">
+  <img src="https://img.shields.io/badge/Python-3776AB?style=for-the-badge&logo=python&logoColor=white" alt="Python" />
+  <img src="https://img.shields.io/badge/scikit--learn-F7931E?style=for-the-badge&logo=scikitlearn&logoColor=white" alt="scikit-learn" />
+  <img src="https://img.shields.io/badge/TensorFlow-FF6F00?style=for-the-badge&logo=tensorflow&logoColor=white" alt="TensorFlow" />
+  <img src="https://img.shields.io/badge/XGBoost-189AB4?style=for-the-badge&logo=xgboost&logoColor=white" alt="XGBoost" />
+  <img src="https://img.shields.io/badge/Jupyter-F37626?style=for-the-badge&logo=jupyter&logoColor=white" alt="Jupyter" />
+</p>
 
-This repository focuses on practical implementation and evaluation of modern neural architectures for computer vision and recommendation tasks.  
-Includes both original experiments and model performance reviews.
+> MSc Data Science thesis, rebuilt as a clean, reproducible project.
 
----
+Predicting the operational lifetime of solder joints in electronic assemblies from material, thermal, and geometric features. Built around a real research constraint: only **450 physical samples** were available, and failure data is expensive to collect. A **Generative Adversarial Network (GAN)** synthesises 5,000 training samples, and a suite of supervised regression models is benchmarked against a published correlation-driven neural network baseline.
 
-## Planned Projects
-- **Multiclass Fish Classification** - CNN-based architecture comparison  
-- **NCF Recommender System** - Neural Collaborative Filtering implementation  
-- **LSTM Time Series Prediction** - Sequential modeling of patterns  
-- **MSc Thesis (Raw Version)** - Comparative analysis of ML architectures  
+## The problem
 
----
+Solder joints are the connective tissue of every electronic device: smartphones, medical implants, aerospace avionics. Their failure under thermal cycling, mechanical stress, or creep deformation is a leading cause of field failures, recalls, and warranty claims.
 
-*Model notebooks and results visualizations coming soon.*
+Predicting when a joint will fail matters. But gathering training data is slow and costly. Accelerated life testing takes weeks, and each sample requires destructive testing. Real-world datasets end up small, which is exactly where standard ML models struggle.
+
+This project asks: **can GAN-synthesised data close the gap?**
+
+## Approach
+
+| Stage | Detail |
+|---|---|
+| **Data** | 450 FEM-derived samples, compiled following the methodology in Samavatian et al. (2020), 24 feature candidates each |
+| **Synthesis** | GAN trained to expand to 5,000 samples (TensorFlow / Keras) |
+| **Models** | Random Forest, XGBoost, SVR, GPR, using scikit-learn and XGBoost |
+| **Baseline** | CDNN from Samavatian et al. [3], re-run against the augmented dataset |
+| **Metrics** | RMSE, R², MSE across training, test, and k-fold cross-validation |
+| **Tuning** | GridSearchCV for hyperparameter optimisation |
+
+## Features (24 candidates)
+
+Grouped by physical category, from the original per-sample feature matrix:
+
+- **Thermal**: hot/cold dwelling temperature and time, heating/cooling ramp
+- **Material**: solder/upper/lower layer density, CTE, and melting temperature
+- **Mechanical**: solder/upper/lower layer Young's modulus and Poisson ratio
+- **Geometric**: solder thickness, width, length
+
+Target: **measured useful lifetime** of the joint, in hours.
+
+## Results
+
+### Trained on real data only (450 samples)
+
+| Model | Train RMSE | Test RMSE | CV RMSE | R² |
+|---|---|---|---|---|
+| CDNN (baseline) | 0.0195 | 0.0571 | n/a | **0.821** |
+| Random Forest | 0.0786 | 0.0899 | 0.0932 | -0.0148 |
+| XGBoost | 0.0773 | 0.0917 | 0.0941 | -0.0547 |
+| SVR | 0.0896 | 0.0895 | 0.0899 | -0.0030 |
+| GPR | 0.0896 | 0.0893 | 0.0897 | -0.0001 |
+
+Read the R² column carefully. With 450 samples, none of the general-purpose ML models explain variance in the target. The baseline wins because it was tuned for this dataset by its original authors. This is the honest starting point.
+
+### Trained on GAN-augmented data (5,000 samples)
+
+| Model | Train RMSE | Test RMSE | CV RMSE | R² |
+|---|---|---|---|---|
+| CDNN (baseline) | 0.0483 | 0.0899 | n/a | 0.613 |
+| Random Forest | 0.0249 | 0.0466 | 0.0475 | 0.687 |
+| XGBoost | 0.0350 | 0.0469 | 0.0478 | 0.6835 |
+| SVR | 0.0457 | 0.0454 | 0.0466 | 0.7026 |
+| **GPR** | 0.0451 | **0.0452** | **0.0455** | **0.7057** |
+
+The story in one sentence: GAN augmentation took models that could not beat a horizontal line and made them explain roughly 70% of the variance in solder joint lifetime. GPR and SVR lead, with Random Forest and XGBoost close behind.
+
+## What this demonstrates
+
+- **End-to-end ML workflow**: EDA, feature analysis, GAN synthesis, model training, benchmarking, evaluation
+- **Working with limited data**: the central challenge in applied ML, addressed with generative augmentation
+- **Rigorous comparative evaluation**: multiple metrics, cross-validation, and a published baseline for context
+- **Honest reporting**: negative R² results are documented, not hidden
+- **Physics-informed ML**: feature engineering and interpretation grounded in solder joint mechanics
+
+## Repository structure
+
+```
+predicting-solder-joint-reliability-ml/
+├── README.md
+├── LICENSE
+├── .gitignore
+├── environment.yml                 # pinned dependencies, conda or pip-installable
+├── data/
+│   ├── raw/                        # 450-sample original data (see data/README.md for licensing)
+│   ├── synthetic/                  # generated by make data; gitignored
+│   └── README.md                   # provenance, licensing, and how each file was produced
+├── notebooks/
+│   ├── 01_eda.ipynb
+│   ├── 02_gan_synthesis.ipynb
+│   ├── 03_model_training_real.ipynb
+│   ├── 04_model_training_synthetic.ipynb
+│   └── 05_results_comparison.ipynb
+├── src/
+│   └── solder_reliability/
+│       ├── __init__.py
+│       ├── data_prep.py
+│       ├── gan.py
+│       ├── models.py               # RF, XGBoost, SVR, GPR wrappers
+│       ├── evaluate.py             # RMSE/R²/CV logic, shared across notebooks
+│       └── viz.py
+├── baseline_matlab/
+│   ├── README.md                   # why the baseline is MATLAB and not ported
+│   └── cdnn_baseline.m
+├── reports/
+│   └── figures/                    # exported versions of thesis figures 6.1 through 6.12
+├── results/
+│   └── metrics.csv                 # Table 6.1 and 6.2 numbers, machine-readable
+├── tests/
+│   └── test_evaluate.py            # sanity checks on metric functions
+├── Makefile
+└── pyproject.toml
+```
+
+### On the notebooks / src split
+
+`src/solder_reliability/` holds all reusable logic: data loading, the GAN, model wrappers, evaluation, and plotting helpers. The notebooks import from `src` and focus on narrative and visualisation. That means the code that actually runs is unit-testable and importable, not buried in cells, and the notebooks read as a walkthrough of the thesis rather than a pile of one-off scripts.
+
+### On the MATLAB baseline
+
+The CDNN baseline from Samavatian et al. [3] is MATLAB code that has been replicated and re-run against the augmented dataset. It lives in `baseline_matlab/` rather than being ported to Python, for two reasons:
+
+1. It is not my model to reimplement, and preserving the original implementation keeps the comparison honest.
+2. Porting it would introduce a second source of error: an incorrect port could silently change the baseline's numbers.
+
+`baseline_matlab/README.md` documents how to run it and how its outputs feed into the results tables.
+
+### On data provenance
+
+`data/README.md` documents where the 450 samples come from, their licence, how the synthetic 5,000 were generated, and any preprocessing applied. The original samples are derived from Samavatian et al. (Scientific Reports, CC-BY; licence confirmed before committing). If the licence ever becomes a problem, `data/raw/` can be replaced with a `fetch_data.py` script that downloads from the paper's public repository at build time.
+
+## Reproducing these results
+
+```bash
+git clone https://github.com/SonOfElle/predicting-solder-joint-reliability-ml
+cd prediciting-solder-joint-reliability-ml
+make setup   # creates the environment, installs pinned dependencies
+make data    # generates the synthetic dataset via GAN (~10 min)
+make train   # trains and evaluates all models on both datasets
+make report  # exports figures to reports/figures/ and metrics to results/
+```
+
+Or run `make all` to chain everything.
+
+### A caveat on exact reproducibility
+
+GAN training is stochastic. Running `make data` on your machine will produce a *plausible* 5,000-sample dataset, not the byte-identical one used for the numbers in this README. A fixed seed is set and documented, and library versions are pinned in `environment.yml`, but some drift is unavoidable across hardware and TensorFlow versions.
+
+If you need to reproduce the exact published numbers rather than a fresh run, the synthetic dataset and the trained GAN weights used for the tables above are attached to the **latest GitHub Release**. Download them into `data/synthetic/`, skip `make data`, and run `make train`.
+
+## Limitations and future work
+
+Pulled from the thesis's own closing section:
+
+- **Absolute data volume remains small.** GAN augmentation helps, but real-world data collection is still the highest-value next step. Synthetic samples that inherit the biases of 450 originals are still biased.
+- **No time-dependent features.** The current feature set is static per sample. Incorporating temperature cycling profiles over time would better capture creep and fatigue behaviour.
+- **No ensembling across models.** Combining RF, XGBoost, SVR, and GPR outputs might beat any single model. Not attempted here.
+- **Baseline hyperparameter asymmetry.** The CDNN's hyperparameters were tuned on the real dataset in the original research, not re-tuned for the synthetic set. The real-data comparison in particular should be read with that caveat in mind.
+
+## Baseline citation
+
+> Samavatian, V., Fotuhi-Firuzabad, M., Samavatian, M., Dehghanian, P., & Blaabjerg, F. (2020). *Correlation-driven machine learning for accelerated reliability assessment of solder joints in electronics.* Scientific Reports, 10(1), 14821. https://doi.org/10.1038/s41598-020-71926-7
+
+The baseline is cited as a comparative reference. Its MATLAB implementation used for the CDNN replication is included in `baseline_matlab/` for completeness and to keep the comparison reproducible.
+
+## Related
+
+- [Predictive Maintenance Pipeline](https://github.com/SonOfElle/predictive-maintenance-pipeline): where a lifetime-prediction model gets operationalised as a Fabric data pipeline
+
+## Reference
+
+Full thesis: *Reliability prediction of soldering joints in electronic systems*, MSc Data Science, Silesian University of Technology, 2023.
+
+## License
+
+MIT for the code. Data licensing is documented separately in `data/README.md`.
