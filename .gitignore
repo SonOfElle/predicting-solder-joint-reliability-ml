@@ -6,6 +6,10 @@ data/synthetic/*
 models/
 artifacts/
 
+# MATLAB baseline
+baseline_matlab/*.mat
+baseline_matlab/Data/
+
 # Python
 __pycache__/
 *.py[cod]
@@ -42,6 +46,7 @@ htmlcov/
 # OS
 .DS_Store
 Thumbs.db
+desktop.ini
 
 # Logs
 *.log
