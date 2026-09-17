@@ -3,16 +3,15 @@ channels:
   - conda-forge
   - defaults
 dependencies:
-  # Versions are pinned once the refactor is complete.
-  # Exact RMSE reproduction depends on these pins.
-  # See data/README.md, section "Known caveats".
   - python=3.10
   - pip
   - pip:
-      # - tensorflow==
-      # - scikit-learn==
-      # - xgboost==
-      # - numpy==
-      # - pandas==
-      # - matplotlib==
-      # - jupyter==
+      - tensorflow==2.13.0
+      - scikit-learn==1.2.2
+      - xgboost==1.7.5
+      - numpy==1.24.3
+      - pandas==2.0.3
+      - matplotlib==3.7.2
+      - jupyter==1.0.0
+      - ipykernel==6.25.0
+      - pytest==7.4.0
