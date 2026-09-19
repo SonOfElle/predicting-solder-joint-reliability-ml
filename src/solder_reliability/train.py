@@ -27,6 +27,13 @@ Scaling strategies:
   principled: split first, fit the feature scaler on X_train only and
               the target scaler on y_train only. No leakage.
 
+Grid search on large datasets can be capped via ``max_search_samples``.
+When the training split exceeds the cap, a random subsample is used for
+``GridSearchCV``. The winning estimator is then refit on the full
+training split before test evaluation. This is standard practice for
+tractability and is recorded per row in ``train_samples`` and
+``search_samples``.
+
 Metrics are reported in both scaled and hour units. ``rmse_hours =
 rmse_scaled * target_spread_hours`` where ``target_spread_hours`` is
 the raw target range divided by the scaler's (0.8 - 0.2) span. R2 is
@@ -35,7 +42,7 @@ invariant to linear rescaling of the target and is reported once.
 
 from __future__ import annotations
 
-from dataclasses import asdict, dataclass, field
+from dataclasses import asdict, dataclass
 from typing import Any
 
 import numpy as np
@@ -90,6 +97,8 @@ class StageResult:
     train_rmse_hours: float
     test_rmse_hours: float
     cv_rmse_hours: float
+    train_samples: int
+    search_samples: int
 
 
 def clone_factory(estimator: Any):
@@ -149,6 +158,7 @@ def run_stage(
     y: np.ndarray,
     *,
     n_jobs: int = 1,
+    max_search_samples: int | None = None,
 ) -> tuple[StageResult, Any]:
     """Run one stage for one model on one raw dataset.
 
@@ -181,6 +191,19 @@ def run_stage(
 
     _, estimator, param_grid = models.make(model_name, grid=grid)
 
+    n_train = X_tr.shape[0]
+    if max_search_samples is not None and n_train > max_search_samples:
+        rng = np.random.default_rng(SEED)
+        search_idx = rng.choice(
+            n_train, size=max_search_samples, replace=False
+        )
+        X_search = X_tr[search_idx]
+        y_search = y_tr[search_idx]
+    else:
+        X_search = X_tr
+        y_search = y_tr
+    n_search = X_search.shape[0]
+
     gs = GridSearchCV(
         estimator,
         param_grid,
@@ -188,8 +211,13 @@ def run_stage(
         scoring="neg_mean_squared_error",
         n_jobs=n_jobs,
     )
-    gs.fit(X_tr, y_tr)
-    best = gs.best_estimator_
+    gs.fit(X_search, y_search)
+
+    # Refit the winning estimator on the full training split. The search
+    # may have run on a subsample for tractability; the final model does
+    # not. Test evaluation uses the full-data refit.
+    best = clone(gs.best_estimator_)
+    best.fit(X_tr, y_tr)
 
     train_pred = best.predict(X_tr)
     test_pred = best.predict(X_te)
@@ -217,6 +245,8 @@ def run_stage(
         train_rmse_hours=train_rmse_s * spread_hours,
         test_rmse_hours=test_rmse_s * spread_hours,
         cv_rmse_hours=cv_rmse_s * spread_hours,
+        train_samples=int(n_train),
+        search_samples=int(n_search),
     )
     return result, best
 
@@ -238,6 +268,7 @@ def run_all(
     model_names: list[str] | None = None,
     verbose: bool = True,
     n_jobs: int = 1,
+    max_search_samples: int | None = None,
 ) -> tuple[pd.DataFrame, dict[tuple[str, str], Any]]:
     """Run all models through their applicable stages.
 
@@ -265,7 +296,9 @@ def run_all(
             if verbose:
                 print(f"{model_name:14s} {stage} ...", end=" ", flush=True)
             res, est = run_stage(
-                model_name, stage, X, y, n_jobs=n_jobs
+                model_name, stage, X, y,
+                n_jobs=n_jobs,
+                max_search_samples=max_search_samples,
             )
             rows.append(asdict(res))
             fitted[(model_name, stage)] = est
