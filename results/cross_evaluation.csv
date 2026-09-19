@@ -1,0 +1,5 @@
+model,stage,r2_source,r2_cross,rmse_hours_cross,rmse_scaled_cross,target_spread_hours_source,best_params
+gpr,4. regrid,0.5258835253308832,-0.9540761251383023,831.7663256340214,0.05409784395777911,15375.221354166664,"{'alpha': 0.001, 'kernel': 1**2 * RBF(length_scale=1) + WhiteKernel(noise_level=0.001)}"
+random_forest,3. scale fix,0.4757252367194341,-0.6610151037402447,766.8622956174244,0.04987650440620198,15375.221354166664,"{'max_depth': None, 'min_samples_leaf': 4, 'min_samples_split': 10, 'n_estimators': 200}"
+svr,4. regrid,0.5251547358597302,-0.8450578429842799,808.2311554838071,0.05256712322159691,15375.221354166664,"{'C': 100.0, 'gamma': 0.01, 'kernel': 'rbf'}"
+xgboost,3. scale fix,0.47390979528427124,-0.6312030321008,759.9492741905784,0.04942688346952697,15375.221354166664,"{'learning_rate': 0.01, 'n_estimators': 300}"

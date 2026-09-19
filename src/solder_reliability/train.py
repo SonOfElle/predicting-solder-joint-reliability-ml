@@ -251,6 +251,121 @@ def run_stage(
     return result, best
 
 
+def run_cross_eval(
+    model_name: str,
+    stage_name: str,
+    X_source: np.ndarray,
+    y_source: np.ndarray,
+    X_target: np.ndarray,
+    y_target: np.ndarray,
+    *,
+    n_jobs: int = 1,
+    max_search_samples: int | None = None,
+) -> dict[str, Any]:
+    """Fit on source, evaluate on target.
+
+    Only supports principled-scaling stages (3 and 4). Stage 1 and 2 use
+    the original joint scaler, which cannot be meaningfully applied to a
+    target set of different size and distribution.
+
+    Scaling is fit on the source training split. Predictions on the
+    target are denormalised using the source target range so the model
+    is evaluated in "source-calibrated hours" against the target raw
+    values. This is the honest cross-track comparison: the model was
+    trained to predict on the source scale, and we ask whether those
+    predictions match reality.
+    """
+    if stage_name not in STAGES:
+        raise KeyError(f"unknown stage {stage_name!r}; known: {list(STAGES)}")
+    cfg = STAGES[stage_name]
+    if cfg["scale_strategy"] != "principled":
+        raise ValueError(
+            f"cross eval requires a principled-scaling stage, "
+            f"{stage_name!r} uses {cfg['scale_strategy']!r}"
+        )
+    grid = cfg["grid"]
+    if grid == "extended" and model_name not in MODELS_WITH_REGRID:
+        raise ValueError(
+            f"{model_name} has no extended grid; use stage '3. scale fix'"
+        )
+
+    src_train_idx, src_test_idx = _split_indices(len(X_source))
+
+    x_scaler = MinMaxScaler(feature_range=SCALER_RANGE).fit(
+        X_source[src_train_idx]
+    )
+    y_scaler = MinMaxScaler(feature_range=SCALER_RANGE).fit(
+        y_source[src_train_idx].reshape(-1, 1)
+    )
+
+    X_tr = x_scaler.transform(X_source[src_train_idx])
+    X_te = x_scaler.transform(X_source[src_test_idx])
+    y_tr = y_scaler.transform(
+        y_source[src_train_idx].reshape(-1, 1)
+    ).ravel()
+    y_te = y_scaler.transform(
+        y_source[src_test_idx].reshape(-1, 1)
+    ).ravel()
+
+    y_source_train_raw = y_source[src_train_idx]
+    source_min = float(y_source_train_raw.min())
+    source_range = float(y_source_train_raw.max() - source_min)
+    spread_hours = source_range / _SCALER_SPAN
+
+    _, estimator, param_grid = models.make(model_name, grid=grid)
+
+    n_train = X_tr.shape[0]
+    if max_search_samples is not None and n_train > max_search_samples:
+        rng = np.random.default_rng(SEED)
+        idx = rng.choice(n_train, size=max_search_samples, replace=False)
+        X_search, y_search = X_tr[idx], y_tr[idx]
+    else:
+        X_search, y_search = X_tr, y_tr
+
+    gs = GridSearchCV(
+        estimator,
+        param_grid,
+        cv=CV_FOLDS,
+        scoring="neg_mean_squared_error",
+        n_jobs=n_jobs,
+    )
+    gs.fit(X_search, y_search)
+    best = clone(gs.best_estimator_)
+    best.fit(X_tr, y_tr)
+
+    src_pred = best.predict(X_te)
+    r2_source = float(
+        1 - np.sum((y_te - src_pred) ** 2) / np.sum((y_te - y_te.mean()) ** 2)
+    )
+
+    X_target_scaled = x_scaler.transform(X_target)
+    y_pred_scaled = best.predict(X_target_scaled)
+    y_pred_hours = (
+        (y_pred_scaled - SCALER_RANGE[0]) / _SCALER_SPAN
+        * source_range
+        + source_min
+    )
+
+    r2_cross = float(
+        1 - np.sum((y_target - y_pred_hours) ** 2)
+        / np.sum((y_target - y_target.mean()) ** 2)
+    )
+    rmse_hours_cross = float(
+        np.sqrt(np.mean((y_target - y_pred_hours) ** 2))
+    )
+    rmse_scaled_cross = rmse_hours_cross / spread_hours
+
+    return {
+        "model": model_name,
+        "stage": stage_name,
+        "r2_source": r2_source,
+        "r2_cross": r2_cross,
+        "rmse_hours_cross": rmse_hours_cross,
+        "rmse_scaled_cross": rmse_scaled_cross,
+        "target_spread_hours_source": spread_hours,
+        "best_params": dict(gs.best_params_),
+    }
+
 def _stages_for(model_name: str) -> list[str]:
     return [
         s for s in STAGE_ORDER
