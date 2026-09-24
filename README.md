@@ -196,8 +196,8 @@ What each target does:
 - `make env`: creates the conda environment and installs pinned dependencies
 - `make data`: trains the GANs, writes synthetic arrays to `data/synthetic/`
 - `make notebooks`: executes all five notebooks end to end
-- `make figures`: regenerates figures from `reports/figures/`
-- `make metrics`: writes `results/metrics.csv` and `results/cross_evaluation.csv`
+- `make figures`: verifies figures are present in `reports/figures/`
+- `make metrics`: verifies `results/metrics.csv` and `results/cross_evaluation.csv` are present
 - `make test`: runs the pytest suite
 
 Or `make all` to chain everything.

@@ -101,6 +101,7 @@ Key details:
 - **Input:** the 24 scaled feature candidates.
 - **Output:** 5,000 synthetic rows with the same 25 columns as the raw data.
 - **Seed:** fixed. See `src/solder_reliability/gan.py` for the seed value.
+- **Two GANs:** the rebuild trains two GANs from the same architecture and seed, one on the fixed per-sample layout and one on the original C-order layout. Outputs are saved to `data/synthetic/synth_fixed.npy` and `synth_original.npy`. See `02_gan_synthesis.ipynb`.
 - **Exact reproduction:** not guaranteed from source alone. TensorFlow version, GPU or CPU execution, and library versions affect the exact synthetic values. The handover decision is to publish the exact 5,000-sample synthetic dataset as a GitHub Release asset. That asset is the canonical synthetic dataset. Regenerating via `make data` produces a statistically similar but not bit-identical dataset.
 
 This caveat is documented in the notebooks and in the repo README. It is not hidden.
@@ -135,7 +136,7 @@ If the refactored pipeline changes any of these choices, the change must be docu
 1. **The real data is simulated, not physical.** The target is FEM output, not measured failure time. This limits external validity.
 2. **The real dataset is small.** 450 samples for 24 features. This is the core reason the ML models fail on real data and the reason the GAN was used.
 3. **The synthetic data is not bit-reproducible from source.** The Release asset is the canonical version.
-4. **The GAN does not preserve all statistical properties perfectly.** The thesis does not claim it does. The synthetic data improves model R² because it increases sample size and smooths the feature space, not because it is a perfect replica of the real distribution.
+4. **The GAN does not preserve all statistical properties perfectly.** Measured on the rebuild's GAN output: the real target spans 3,986 hours (24,332 to 28,318) and the synthetic target spans 9,226 hours (22,374 to 31,600). The GAN widens the target distribution by roughly 2.3x. Several feature columns also drift, for example heating ramp mean shifts from 183 to 145 and cold dwell temperature mean from -21 to -25. Scaled RMSE is therefore not comparable across real and synthetic tracks without correcting for the spread difference. Every metric table in this repo reports both scaled and hour units, and `results/metrics.csv` carries a `target_spread_hours` column so the conversion can be verified.
 
 ## Citations
 
