@@ -52,11 +52,11 @@ def evaluate_model(
     y_test: np.ndarray,
     cv: int = 3,
 ) -> dict[str, Any]:
-    """Fit, predict, and score a model.
+    """Predict and score an already-fitted model.
 
-    Returns a dict with metrics and the train/test prediction vectors.
-    The model is expected to be already fitted or fit-able. It is not
-    refit here; call fit before passing if you need to control that.
+    The estimator must be fitted by the caller. This is deliberate:
+    cross-validation and grid-search paths fit their own estimators, and
+    this helper only computes the metrics for a given fit.
     """
     train_pred = model.predict(X_train)
     test_pred = model.predict(X_test)
